@@ -1,0 +1,15 @@
+# Ambientes Virtuais
+.venv/
+venv/
+env/
+
+# Cache do Python
+__pycache__/
+*.pyc
+
+# Banco de dados local (Para não sobrescrever o banco de testes um do outro)
+*.db
+*.sqlite3
+
+# Variáveis de ambiente
+.env
