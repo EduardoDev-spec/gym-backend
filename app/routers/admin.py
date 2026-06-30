@@ -55,8 +55,8 @@ async def get_trainer(user: user_dependency, db: db_dependency, name: Optional[s
     user_model = query.offset(skip).limit(limit).all()
     return user_model
   
-@router.post('/create_trainer', status_code=status.HTTP_201_CREATED)
-async def create_trainer(user: user_dependency, db: db_dependency, create_user_request: CreateUserRequest):
+@router.post('/create_user', status_code=status.HTTP_201_CREATED)
+async def create_user(user: user_dependency, db: db_dependency, create_user_request: CreateUserRequest):
     if user.get('role') != UserRole.admin:
         raise HTTPException(status_code=403, detail="Acesso negado. Área exclusiva para administradores.")
     
