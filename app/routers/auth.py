@@ -10,7 +10,7 @@ from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from passlib.context import CryptContext
 from datetime import timedelta, datetime, timezone
 from jose import jwt, JWTError
-from ..schemas.auth import Token
+from ..schemas.auth import Token, UserRole
 
 
 router = APIRouter(prefix='/auth', tags=['auth'])
@@ -64,7 +64,6 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Não foi possivel validar as credenciais')
 
 
-
 @router.post('/create_user', status_code=status.HTTP_201_CREATED)
 async def create_user(db: db_dependency, create_user_request: CreateUserRequest):
     existing_user = db.query(User). filter(User.email == create_user_request.email).first()
@@ -75,7 +74,7 @@ async def create_user(db: db_dependency, create_user_request: CreateUserRequest)
         name = create_user_request.name,
         email = create_user_request.email,
         hashed_password = bcrypt_context.hash(create_user_request.password),
-        role = create_user_request.role,
+        role = UserRole.gym_member,
         phone_number = create_user_request.phone_number,
         
     )

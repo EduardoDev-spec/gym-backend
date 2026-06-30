@@ -1,13 +1,15 @@
 import enum
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
 
+
 class UserRole(str, enum.Enum):
-    gym_member =  'aluno'
+    gym_member = 'aluno'
     admin = "admin"
     trainer = 'treinador'
-    
+
 
 class User(Base):
     __tablename__ = "users"
@@ -20,3 +22,9 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     phone_number = Column(String)
+
+    assessments = relationship(
+        "PhysicalAssessment",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
