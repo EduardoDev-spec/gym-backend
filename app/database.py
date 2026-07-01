@@ -3,7 +3,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from app.core.config import settings
 
 # Creates the connection engine to PostgreSQL using the URL validated by Pydantic
-engine  = create_engine(settings.DATABASE_URL)
+engine  = create_engine(settings.DATABASE_URL, connect_args={"check_same_thread": False})
 
 # Creates a session factory. Each request will have its own isolated session.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

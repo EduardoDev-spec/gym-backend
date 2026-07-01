@@ -6,9 +6,7 @@ from ..models.exercises import Exercises
 from ..models.physical_assessment import PhysicalAssessment
 from ..database import SessionLocal
 from .auth import get_current_user
-from passlib.context import CryptContext
-from  ..schemas.admin import UserResponse, CreateExerciseRequest
-from ..schemas.auth import CreateUserRequest
+from  ..schemas.admin import CreateExerciseRequest
 from ..schemas.trainer import PhysicalAssessmentRequest
 
 router = APIRouter(prefix='/trainer', tags=['trainer'] )
@@ -103,7 +101,41 @@ async def edit_exercises(user: user_dependency, db: db_dependency, user_id: int,
     db.commit()
     db.refresh(exercise)
 
+@router.delete('/gym_member/{user_id}/exercises/{exercise_id}')
+async def delete_exercise(user: user_dependency, db: db_dependency, user_id: int, exercise_id: int):
+    if user.get('role') != UserRole.trainer:
+        raise HTTPException(status_code=404, detail="Acesso negado. Área exclusiva para treinadores.")
+    
+    exercise  = db.query(Exercises).filter(Exercises.id == exercise_id, Exercises.user_id == user_id).first()
 
+    if not exercise:
+        raise HTTPException(
+            status_code=404,
+            detail="Exercício não encontrado."
+        )
+    
+    db.delete(exercise)
+    db.commit()
+    return {'mensage': f'Exercicio deletado com sucesso'}
+
+
+
+@router.delete('/gym_member/{user_id}/workout/{workout_type}')
+async def delete_training(user: user_dependency, db: db_dependency, user_id: int, workout_type: str):
+    if user.get('role') != UserRole.trainer:
+        raise HTTPException(status_code=404, detail="Acesso negado. Área exclusiva para treinadores.")
+    
+    exercise  = db.query(Exercises).filter(Exercises.workout_type == workout_type, Exercises.user_id == user_id)
+
+    if not exercise.first():
+        raise HTTPException(
+            status_code=404,
+            detail="Exercício não encontrado."
+        )
+    
+    exercise.delete(synchronize_session=False)
+    db.commit()
+    return {'mensage': f'Treino excluido com sucesso'}
 
 
 @router.post(

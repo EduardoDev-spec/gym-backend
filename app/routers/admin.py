@@ -76,24 +76,7 @@ async def create_user(user: user_dependency, db: db_dependency, create_user_requ
     db.commit()
     return {'message': f'Treinador {create_trainer_model.name} criado com sucesso'}
 
-@router.put('/gym_member/{user_id}/edit_exercises/{exercise_id}')
-async def edit_exercises(user: user_dependency, db: db_dependency, user_id: int, exercise_id: int, exercises_request: CreateExerciseRequest):
-    if user.get('role') != UserRole.admin:
-        raise HTTPException(status_code=404, detail="Acesso negado. Área exclusiva para treinadores.")
-    
-    exercise  = db.query(Exercises).filter(Exercises.id == exercise_id, Exercises.user_id == user_id).first()
-    if not exercise :
-        raise HTTPException(status_code=404, detail='Não foi possivel encontrar essa busca. Verifique se o ID existe e pertence a um aluno e ou o exercicio.')
 
-    
-    exercise.name_exercises = exercises_request.name_exercises
-    exercise.workout_type = exercises_request.workout_type
-    exercise.sets = exercises_request.sets
-    exercise.reps = exercises_request.reps
-    exercise.weight = exercises_request.weight
-        
-    db.commit()
-    db.refresh(exercise)
 
 @router.get('/gym_member/{user_id}', response_model=UserResponse, status_code=status.HTTP_200_OK)
 async def get_gym_member_by_id(user_id: int, user: user_dependency, db:db_dependency):
@@ -119,6 +102,7 @@ async def get_trainer_by_id(user_id: int, user: user_dependency, db:db_dependenc
         raise HTTPException(status_code=404, detail='Aluno não encontrado. Verifique se o ID existe e pertence a um aluno.')
     
     return user_model
+
 
 @router.get('/gym_member/{user_id}/toggle_status', status_code=status.HTTP_200_OK)
 async def get_trainer_by_id(user_id: int, user: user_dependency, db:db_dependency):
@@ -166,3 +150,58 @@ async def create_exercises_for_gym_member(user_id: int, exercises_request: list[
     return {
         "message": f"{len(lista_exercicios_db)} exercícios cadastrados com sucesso para o aluno {gym_member.name}."
     }
+
+@router.put('/gym_member/{user_id}/edit_exercises/{exercise_id}')
+async def edit_exercises(user: user_dependency, db: db_dependency, user_id: int, exercise_id: int, exercises_request: CreateExerciseRequest):
+    if user.get('role') != UserRole.admin:
+        raise HTTPException(status_code=404, detail="Acesso negado. Área exclusiva para treinadores.")
+    
+    exercise  = db.query(Exercises).filter(Exercises.id == exercise_id, Exercises.user_id == user_id).first()
+    if not exercise :
+        raise HTTPException(status_code=404, detail='Não foi possivel encontrar essa busca. Verifique se o ID existe e pertence a um aluno e ou o exercicio.')
+
+    
+    exercise.name_exercises = exercises_request.name_exercises
+    exercise.workout_type = exercises_request.workout_type
+    exercise.sets = exercises_request.sets
+    exercise.reps = exercises_request.reps
+    exercise.weight = exercises_request.weight
+        
+    db.commit()
+    db.refresh(exercise)
+
+@router.delete('/gym_member/{user_id}/exercises/{exercise_id}')
+async def delete_exercise(user: user_dependency, db: db_dependency, user_id: int, exercise_id: int):
+    if user.get('role') != UserRole.admin:
+        raise HTTPException(status_code=404, detail="Acesso negado. Área exclusiva para treinadores.")
+    
+    exercise  = db.query(Exercises).filter(Exercises.id == exercise_id, Exercises.user_id == user_id).first()
+
+    if not exercise:
+        raise HTTPException(
+            status_code=404,
+            detail="Exercício não encontrado."
+        )
+    
+    db.delete(exercise)
+    db.commit()
+    return {'mensage': f'Exercicio deletado com sucesso'}
+
+
+
+@router.delete('/gym_member/{user_id}/workout/{workout_type}')
+async def delete_training(user: user_dependency, db: db_dependency, user_id: int, workout_type: str):
+    if user.get('role') != UserRole.admin:
+        raise HTTPException(status_code=404, detail="Acesso negado. Área exclusiva para treinadores.")
+    
+    exercise  = db.query(Exercises).filter(Exercises.workout_type == workout_type, Exercises.user_id == user_id)
+
+    if not exercise.first():
+        raise HTTPException(
+            status_code=404,
+            detail="Exercício não encontrado."
+        )
+    
+    exercise.delete(synchronize_session=False)
+    db.commit()
+    return {'mensage': f'Treino excluido com sucesso'}

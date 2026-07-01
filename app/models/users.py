@@ -28,3 +28,8 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan"
     )
+
+    workout_sessions = relationship(
+        "WorkoutSession",
+        back_populates="user"
+)
