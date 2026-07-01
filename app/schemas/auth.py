@@ -4,8 +4,10 @@ from app.models.users import UserRole
 class CreateUserRequest(BaseModel):
     name: str
     email: str
+    cpf: str
     password: str
     role: UserRole
+    address: str
     phone_number: str
 
 class Token(BaseModel):
