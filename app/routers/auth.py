@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status, HTTPException, Request
 from typing import Annotated
 from ..database import SessionLocal
 from sqlalchemy.orm import Session
-from ..schemas.auth import CreateUserRequest
+from ..schemas.auth import CreateUserRequest, ChangePasswordRequest
 from ..models.users import User
 from app.core.config import settings
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
@@ -32,7 +32,6 @@ def get_db():
         db.close()
 
 db_dependency = Annotated[Session, Depends(get_db)]
-
 
 def authenticate_user(email: str, password: str, db):
     user = db.query(User).filter(User.email == email).first()
@@ -91,3 +90,31 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
     token = create_access_token(user.email, user.id, user.role, timedelta(minutes=20))
 
     return {'access_token': token, 'token_type': 'bearer'}
+
+user_dependency = Annotated[dict, Depends(get_current_user)]
+
+@router.put('/change_password', status_code=status.HTTP_200_OK)
+async def change_password(user: user_dependency, db: db_dependency, request: ChangePasswordRequest):
+
+    user_model = db.query(User).filter(User.id == user['id']).first()
+
+    if not user_model:
+        raise HTTPException(status_code=404, detail='Usuário não encontrado.')
+    
+    if not bcrypt_context.verify(request.current_password, user_model.hashed_password):
+        raise HTTPException(status_code=400, detail='Senha incorreta')
+    
+    if request.new_password != request.confirm_password:
+        raise HTTPException(status_code=400, detail='As senhas não coincidem.')
+    
+    if bcrypt_context.verify(request.new_password, user_model.hashed_password):
+        raise HTTPException(status_code=400, detail='A nova senha deve ser diferente da atual.')
+    
+    user_model.hashed_password = bcrypt_context.hash(request.new_password)
+
+    db.commit()
+
+    return {
+        "message": "Senha alterada com sucesso."
+    }
+    
