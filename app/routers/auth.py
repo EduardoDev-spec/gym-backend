@@ -64,17 +64,27 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
 
 @router.post('/create_user', status_code=status.HTTP_201_CREATED)
 async def create_user(db: db_dependency, create_user_request: CreateUserRequest):
-    existing_user = db.query(User). filter(User.email == create_user_request.email).first()
+
+    print(create_user_request.model_dump())   # <-- ADICIONE
+
+    existing_user = db.query(User).filter(
+        User.email == create_user_request.email
+    ).first()
+
     if existing_user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Este e-mail já está em uso.")
+        raise HTTPException(
+            status_code=400,
+            detail="Este e-mail já está em uso."
+        )
 
     create_user_model = User(
-        name = create_user_request.name,
-        email = create_user_request.email,
-        hashed_password = bcrypt_context.hash(create_user_request.password),
-        role = UserRole.gym_member,
-        phone_number = create_user_request.phone_number,
-        
+        name=create_user_request.name,
+        email=create_user_request.email,
+        cpf=create_user_request.cpf,
+        hashed_password=bcrypt_context.hash(create_user_request.password),
+        role=create_user_request.role,
+        address=create_user_request.address,
+        phone_number=create_user_request.phone_number
     )
 
     db.add(create_user_model)
@@ -107,7 +117,7 @@ async def change_password(user: user_dependency, db: db_dependency, request: Cha
     if request.new_password != request.confirm_password:
         raise HTTPException(status_code=400, detail='As senhas não coincidem.')
     
-    if bcrypt_context.verify(request.new_password, user_model.hashed_password):
+    if  bcrypt_context.verify(request.new_password, user_model.hashed_password):
         raise HTTPException(status_code=400, detail='A nova senha deve ser diferente da atual.')
     
     user_model.hashed_password = bcrypt_context.hash(request.new_password)

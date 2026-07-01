@@ -56,27 +56,75 @@ async def get_trainer(user: user_dependency, db: db_dependency, name: Optional[s
     return user_model
   
 @router.post('/create_user', status_code=status.HTTP_201_CREATED)
-async def create_user(user: user_dependency, db: db_dependency, create_user_request: CreateUserRequest):
+async def create_user(
+    user: user_dependency,
+    db: db_dependency,
+    create_user_request: CreateUserRequest
+):
     if user.get('role') != UserRole.admin:
-        raise HTTPException(status_code=403, detail="Acesso negado. Área exclusiva para administradores.")
-    
-    existing_user = db.query(User).filter(User.email == create_user_request.email).first()
-    if existing_user:
-        raise HTTPException(status_code=409, detail='Email já cadastrado')
+        raise HTTPException(
+            status_code=403,
+            detail="Acesso negado. Área exclusiva para administradores."
+        )
 
-    create_trainer_model = User(
-        name = create_user_request.name,
-        email = create_user_request.email,
-        hashed_password = bcrypt_context.hash(create_user_request.password),
-        role = UserRole.trainer,
-        phone_number = create_user_request.phone_number,
+    print("=" * 50)
+    print("REQUEST RECEBIDO:")
+    print(create_user_request.model_dump())
+    print("=" * 50)
+
+    existing_user = db.query(User).filter(
+        User.email == create_user_request.email
+    ).first()
+
+    if existing_user:
+        raise HTTPException(
+            status_code=409,
+            detail='Email já cadastrado'
+        )
+
+    create_user_model = User(
+        name=create_user_request.name,
+        email=create_user_request.email,
+        cpf=create_user_request.cpf,
+        hashed_password=bcrypt_context.hash(create_user_request.password),
+        role=create_user_request.role,
+        address=create_user_request.address,
+        phone_number=create_user_request.phone_number
     )
 
-    db.add(create_trainer_model)
+    print("=" * 50)
+    print("OBJETO USER:")
+    print(create_user_model.__dict__)
+    print("=" * 50)
+
+    db.add(create_user_model)
     db.commit()
-    return {'message': f'Treinador {create_trainer_model.name} criado com sucesso'}
+    db.refresh(create_user_model)
 
+    return {
+        "message": f"Usuário {create_user_model.name} criado com sucesso"
+    }
 
+@router.put('/edit_user/{user_id}')
+async def edit_user(user: user_dependency, db: db_dependency, user_request: CreateUserRequest, user_id: int):
+    if user.get('role') != UserRole.admin:
+        raise HTTPException(status_code=404, detail='Acesso negado. Área exclusiva para administradores.')
+    
+    query = db.query(User).filter(User.id == user_id).first()
+
+    if not query:
+        raise HTTPException(status_code=404, detail='Usuario não encontrado ou não existente')
+    
+    query.name = user_request.name
+    query.email = user_request.email
+    query.cpf = user_request.cpf
+    query.password = user_request.password
+    query.role =  user_request.role
+    query.address = user_request.address
+    query.phone_number = user_request.phone_number
+
+    db.commit()
+    db.refresh(query)
 
 @router.get('/gym_member/{user_id}', response_model=UserResponse, status_code=status.HTTP_200_OK)
 async def get_gym_member_by_id(user_id: int, user: user_dependency, db:db_dependency):
