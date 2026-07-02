@@ -5,6 +5,8 @@ from ..models.users import User, UserRole
 from ..models.exercises import Exercises
 from ..models.workout_session import WorkoutSession, SessionStatus
 from ..models.workout_exercise import WorkoutExercise
+from ..models.physical_assessment import PhysicalAssessment
+from ..schemas.trainer import PhysicalAssessmentRequest
 from ..schemas.gym_member import CompleteExerciseRequest
 from ..database import SessionLocal
 from .auth import get_current_user
@@ -219,3 +221,19 @@ async def complete_exercise(
         "message": "Exercício concluído com sucesso.",
         "exercise": workout_exercise
     }
+
+@router.get('/gym_member/physical_assessment', response_model=PhysicalAssessmentRequest)
+async def get_physical_assessment(user: user_dependency, db:db_dependency):
+    if user.get('role') != UserRole.gym_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado."
+        )
+    
+    physical_assessment = db.query(PhysicalAssessment).filter(PhysicalAssessment.users_id == user.get('id')).first()
+
+    if not physical_assessment:
+        raise HTTPException(status_code=404, detail='Você não possui avaliação fisica ainda, agende com nossos funcionarios!')
+    
+    return physical_assessment
+    

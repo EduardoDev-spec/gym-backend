@@ -26,7 +26,7 @@ user_dependency = Annotated[dict, Depends(get_current_user)]
 async def read_gym_members(user: user_dependency, db: db_dependency, name: Optional[str] = None, limit: int = 20, skip: int = 0):
     if user.get('role') != UserRole.trainer:
         raise HTTPException(
-        status_code=403,
+        status_code=status.HTTP_403_FORBIDDEN,
         detail="Acesso negado. Área exclusiva para administradores.")
     
     query = db.query(User).filter(User.role == UserRole.gym_member)
@@ -40,7 +40,7 @@ async def read_gym_members(user: user_dependency, db: db_dependency, name: Optio
 async def read_gym_members(user: user_dependency, db: db_dependency, user_id: int):
     if user.get('role') != UserRole.trainer:
         raise HTTPException(
-        status_code=403,
+        status_code=status.HTTP_403_FORBIDDEN,
         detail="Acesso negado. Área exclusiva para Treinadores.")
     
     query = db.query(User).filter(User.id == user_id, User.role == UserRole.gym_member).first()
@@ -53,7 +53,7 @@ async def read_gym_members(user: user_dependency, db: db_dependency, user_id: in
 @router.post('/gym_member/{user_id}/exercises')
 async def create_exercises_for_gym_member(user: user_dependency, db: db_dependency, user_id: int, exercises_request: list[CreateExerciseRequest] ):
     if user.get('role') != UserRole.trainer:
-        raise HTTPException(status_code=404, detail='Acesso negado. Área exclusiva para Treinadores.')
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Acesso negado. Área exclusiva para Treinadores.')
     
     gym_member = db.query(User.id == user_id, User.role == UserRole.gym_member).first()
     
@@ -85,7 +85,7 @@ async def create_exercises_for_gym_member(user: user_dependency, db: db_dependen
 @router.put('/gym_member/{user_id}/edit_exercises/{exercise_id}')
 async def edit_exercises(user: user_dependency, db: db_dependency, user_id: int, exercise_id: int, exercises_request: CreateExerciseRequest):
     if user.get('role') != UserRole.trainer:
-        raise HTTPException(status_code=404, detail="Acesso negado. Área exclusiva para treinadores.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado. Área exclusiva para treinadores.")
     
     exercise  = db.query(Exercises).filter(Exercises.id == exercise_id, Exercises.user_id == user_id).first()
     if not exercise :
@@ -104,7 +104,7 @@ async def edit_exercises(user: user_dependency, db: db_dependency, user_id: int,
 @router.delete('/gym_member/{user_id}/exercises/{exercise_id}')
 async def delete_exercise(user: user_dependency, db: db_dependency, user_id: int, exercise_id: int):
     if user.get('role') != UserRole.trainer:
-        raise HTTPException(status_code=404, detail="Acesso negado. Área exclusiva para treinadores.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado. Área exclusiva para treinadores.")
     
     exercise  = db.query(Exercises).filter(Exercises.id == exercise_id, Exercises.user_id == user_id).first()
 
@@ -123,7 +123,7 @@ async def delete_exercise(user: user_dependency, db: db_dependency, user_id: int
 @router.delete('/gym_member/{user_id}/workout/{workout_type}')
 async def delete_training(user: user_dependency, db: db_dependency, user_id: int, workout_type: str):
     if user.get('role') != UserRole.trainer:
-        raise HTTPException(status_code=404, detail="Acesso negado. Área exclusiva para treinadores.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado. Área exclusiva para treinadores.")
     
     exercise  = db.query(Exercises).filter(Exercises.workout_type == workout_type, Exercises.user_id == user_id)
 
@@ -244,3 +244,20 @@ async def physical_assessment(
     db.refresh(form)
 
     return form
+
+@router.get('/gym_member/physical_assessment/{user_id}')
+async def get_physical_assessment(user: user_dependency, db: db_dependency, user_id: int):
+    if user.get('role') != UserRole.trainer:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado. Área exclusiva para treinadores.")
+    
+    gym_member = db.query(User).filter(User.role == UserRole.gym_member, User.id == user_id).first()
+
+    if not gym_member:
+        raise HTTPException(status_code=404, detail='Usuario não existe!')
+    
+    physical_assessment = db.query(PhysicalAssessment).filter(PhysicalAssessment.users_id == user_id).first()
+
+    if not physical_assessment:
+        raise HTTPException(status_code=404, detail='O aluno ainda não tem avaliação fisica')
+
+    return physical_assessment
