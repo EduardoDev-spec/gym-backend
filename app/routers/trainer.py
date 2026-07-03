@@ -55,7 +55,7 @@ async def create_exercises_for_gym_member(user: user_dependency, db: db_dependen
     if user.get('role') != UserRole.trainer:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Acesso negado. Área exclusiva para Treinadores.')
     
-    gym_member = db.query(User.id == user_id, User.role == UserRole.gym_member).first()
+    gym_member = (db.query(User).filter(User.id == user_id,User.role == UserRole.gym_member).first())
     
     if not gym_member:
         raise HTTPException(status_code=404, detail='Aluno não encontrado. Verifique se o ID existe e pertence a um aluno.')
@@ -75,7 +75,7 @@ async def create_exercises_for_gym_member(user: user_dependency, db: db_dependen
         lista_exercicios_db.append(new_exercise)
 
     db.add_all(lista_exercicios_db)
-    db.commit
+    db.commit()
 
     return {
         "message": f"{len(lista_exercicios_db)} exercícios cadastrados com sucesso para o aluno {gym_member.name}."
