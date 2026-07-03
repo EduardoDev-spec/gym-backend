@@ -1,5 +1,5 @@
 from typing import Annotated, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from fastapi import APIRouter, Depends, HTTPException, status, Path
 from ..models.users import User, UserRole
 from ..models.exercises import Exercises
@@ -130,6 +130,45 @@ async def start_workout(
     db.commit()
 
     return new_session
+
+
+@router.get('/gym_member/workout/current',)
+async def current_workout(user: user_dependency, db:db_dependency):
+    if user.get('role') != UserRole.gym_member:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+    current = db.query(WorkoutSession).filter(WorkoutSession.user_id == user.get('id'), WorkoutSession.status == "started").first()
+
+    if not current:
+        raise HTTPException(
+            status_code=404,
+            detail="Você não tem nenhum treino iniciado!")
+    
+    workout_exercises = (
+        db.query(WorkoutExercise).options(joinedload(WorkoutExercise.exercise)).filter(WorkoutExercise.workout_session_id == current.id).all())
+    
+   #Alterar mais tarde para um Response deixando mais organizado
+    return {
+    "session": {
+        "id": current.id,
+        "workout_type": current.workout_type,
+        "started_at": current.started_at,
+        "status": current.status,
+    },
+    "exercises": [
+        {
+            "id": we.id,
+            "name": we.exercise.name_exercises,
+            "sets": we.exercise.sets,
+            "reps": we.exercise.reps,
+            "weight": we.exercise.weight,
+            "completed": we.completed,
+            "used_weight": we.used_weight,
+        }
+        for we in workout_exercises
+    ]
+}
+
+
 
 @router.put('/finish_workout/{session_id}', response_model=WorkoutSessionResponse)
 async def finish_workout(
