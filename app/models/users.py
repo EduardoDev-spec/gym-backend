@@ -34,4 +34,10 @@ class User(Base):
     workout_sessions = relationship(
         "WorkoutSession",
         back_populates="user"
-)
+    )
+
+    subscriptions = relationship(
+    "Subscription",
+    back_populates="user",
+    cascade="all, delete-orphan"
+    )   

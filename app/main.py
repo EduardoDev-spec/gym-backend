@@ -1,7 +1,10 @@
 from fastapi import FastAPI
+
 from app.database import engine, Base
 from app.models import users
+from app.core.config import settings
 from .routers import auth, user, admin, trainer, gym_member
+
 
 app = FastAPI()
 

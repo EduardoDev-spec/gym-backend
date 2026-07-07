@@ -8,6 +8,11 @@ from .auth import get_current_user
 from passlib.context import CryptContext
 from  ..schemas.admin import UserResponse, CreateExerciseRequest
 from ..schemas.auth import CreateUserRequest
+from app.models.plans import Plan
+from app.schemas.plans import CreatePlanRequest, PlanResponse
+from ..schemas.subscriptions import AdminSubscriptionResponse, CurrentSubscriptionResponse, SubscriptionStatus, SubscriptionResponse
+from ..models.subscriptions import Subscription
+from datetime import datetime, timedelta
 
 
 
@@ -253,3 +258,335 @@ async def delete_training(user: user_dependency, db: db_dependency, user_id: int
     exercise.delete(synchronize_session=False)
     db.commit()
     return {'mensage': f'Treino excluido com sucesso'}
+
+from app.services.mercado_pago import mercado_pago_service
+
+@router.post(
+    "/plans",
+    response_model=PlanResponse,
+    status_code=status.HTTP_201_CREATED
+)
+async def create_plan(
+    user: user_dependency,
+    db: db_dependency,
+    requesty: CreatePlanRequest
+):
+    if user.get("role") != UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado."
+        )
+
+    plan = (
+        db.query(Plan)
+        .filter(Plan.name == requesty.name)
+        .first()
+    )
+
+    if plan:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Já existe um plano com esse nome."
+        )
+
+    # ============================
+    # Cria o plano no Mercado Pago
+    # ============================
+
+    try:
+        mp_plan = mercado_pago_service.create_plan(
+            name=requesty.name,
+            price=requesty.price,
+            duration_days=requesty.duration_days
+        )
+
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Erro ao criar plano no Mercado Pago: {str(e)}"
+        )
+
+    if "id" not in mp_plan:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=mp_plan
+        )
+
+    # ============================
+    # Salva no banco
+    # ============================
+
+    new_plan = Plan(
+        name=requesty.name,
+        description=requesty.description,
+        price=requesty.price,
+        duration_days=requesty.duration_days,
+        mercado_pago_plan_id=mp_plan["id"]
+    )
+
+    db.add(new_plan)
+    db.commit()
+    db.refresh(new_plan)
+
+    return new_plan
+
+@router.get('/plans', status_code=status.HTTP_201_CREATED)
+async def get_all_plans(user: user_dependency, db: db_dependency):
+    if user.get("role") != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado.")
+
+    plans = db.query(Plan).all()
+
+    if not plans:
+        raise HTTPException(
+        status_code=404,
+        detail="Nenhum plano encontrado."
+    )
+
+    return plans
+
+@router.get('/plans/{plan_id}', status_code=status.HTTP_200_OK)
+async def edit_plan(user: user_dependency, db: db_dependency, plan_id: int):
+    if user.get("role") != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado.")
+    
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+
+    if not plan:
+        raise HTTPException(
+        status_code=404,
+        detail="Nenhum plano encontrado."
+    )
+
+    return plan
+ 
+
+@router.put('/plans/{plan_id}', status_code=status.HTTP_200_OK)
+async def edit_plan(user: user_dependency, db: db_dependency, plan_id: int,  create_plan_request: CreatePlanRequest):
+    if user.get("role") != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado.")
+    
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+
+    if not plan:
+        raise HTTPException(
+        status_code=404,
+        detail="Nenhum plano encontrado."
+    )
+
+    plan.name = create_plan_request.name
+    plan.price = create_plan_request.price
+    plan.description = create_plan_request.description
+    plan.duration_days = create_plan_request.duration_days
+
+    db.commit()
+    db.refresh(plan)
+
+    return plan
+
+
+@router.delete('/plans/{plan_id}', status_code=status.HTTP_200_OK)
+async def delete_plan(user: user_dependency, db: db_dependency, plan_id: int):
+    if user.get("role") != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado.")
+    
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+
+    if not plan:
+        raise HTTPException(
+        status_code=404,
+        detail="Nenhum plano encontrado."
+    )
+
+    if not plan.active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este plano já está desativado."
+        )
+
+    plan.active = False
+
+    db.commit()
+    db.refresh(plan)
+
+    return {'message': 'Plano desativado com sucesso.'}
+
+@router.put('/plans/{plan_id}/activate', status_code=status.HTTP_200_OK)
+async def active_plan(user: user_dependency, db: db_dependency, plan_id: int):
+    if user.get("role") != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado.")
+    
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+
+    if not plan:
+        raise HTTPException(
+        status_code=404,
+        detail="Nenhum plano encontrado."
+    )
+
+    if plan.active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este plano já está ativo."
+        )
+
+    plan.active = True
+
+    db.commit()
+    db.refresh(plan)
+
+    return {'message': 'Plano ativo com sucesso.'}
+
+
+@router.get("/subscriptions", response_model=list[AdminSubscriptionResponse], status_code=status.HTTP_200_OK)
+async def get_all_subscriptions(user: user_dependency, db: db_dependency):
+    if user.get("role") != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado.")
+    
+    subscriptions = db.query(Subscription).all()
+
+    if not subscriptions:
+        raise HTTPException(status_code=404, detail='Não foi encontrado nenhum plano dos alunos!')
+    
+    response = []
+
+    for subscription in subscriptions:
+        response.append({
+            "id": subscription.id,
+            "student_name": subscription.user.name,
+            "student_email": subscription.user.email,
+            "plan_name": subscription.plan.name,
+            "plan_price": subscription.plan.price,
+            "status": subscription.status,
+            "started_at": subscription.started_at,
+            "expires_at": subscription.expires_at,
+            "created_at": subscription.created_at,
+    })
+
+    return response
+
+
+@router.get("/subscriptions/{user_id}", response_model=CurrentSubscriptionResponse, status_code=status.HTTP_200_OK)
+async def get_all_subscriptions(user: user_dependency, db: db_dependency, user_id: int):
+    if user.get("role") != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado.")
+    
+    subscriptions = db.query(Subscription).filter(Subscription.user_id == user_id).first()
+
+    if not subscriptions:
+        raise HTTPException(status_code=404, detail='Não foi encontrado nenhum plano dos alunos!')
+    
+
+    return subscriptions
+
+@router.put(
+    "/subscriptions/{subscription_id}/cancel",
+    response_model=SubscriptionResponse,
+    status_code=status.HTTP_200_OK
+)
+async def cancel_subscription(
+    user: user_dependency,
+    db: db_dependency,
+    subscription_id: int
+):
+    # Verifica se é administrador
+    if user.get("role") != UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado."
+        )
+
+    # Busca a assinatura
+    subscription = (
+        db.query(Subscription)
+        .filter(Subscription.id == subscription_id)
+        .first()
+    )
+
+    if not subscription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assinatura não encontrada."
+        )
+
+    # Verifica se já está cancelada
+    if subscription.status == SubscriptionStatus.cancelled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Esta assinatura já está cancelada."
+        )
+
+    # Atualiza os dados
+    subscription.status = SubscriptionStatus.cancelled
+    subscription.updated_at = datetime.now()
+
+    db.commit()
+    db.refresh(subscription)
+
+    return subscription
+
+@router.put(
+    "/subscriptions/{subscription_id}/approve",
+    response_model=SubscriptionResponse,
+    status_code=status.HTTP_200_OK
+)
+async def approve_subscription(
+    user: user_dependency,
+    db: db_dependency,
+    subscription_id: int
+):
+    # Verifica se é administrador
+    if user.get("role") != UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado."
+        )
+
+    # Busca a assinatura
+    subscription = (
+        db.query(Subscription)
+        .filter(Subscription.id == subscription_id)
+        .first()
+    )
+
+    if not subscription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assinatura não encontrada."
+        )
+
+    # Verifica se já está aprovada
+    if subscription.status == SubscriptionStatus.approved:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Esta assinatura já está aprovada."
+        )
+
+    # Busca o plano para saber sua duração
+    plan = (
+        db.query(Plan)
+        .filter(Plan.id == subscription.plan_id)
+        .first()
+    )
+
+    if not plan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Plano não encontrado."
+        )
+
+    # Data atual
+    now = datetime.now()
+
+    # Atualiza a assinatura
+    subscription.status = SubscriptionStatus.approved
+    subscription.started_at = now
+    subscription.last_payment_at = now
+    subscription.expires_at = now + timedelta(days=plan.duration_days)
+    subscription.next_billing_at = subscription.expires_at
+
+    db.commit()
+    db.refresh(subscription)
+
+    return subscription
