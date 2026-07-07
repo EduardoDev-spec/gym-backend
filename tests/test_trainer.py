@@ -7,6 +7,7 @@ Testes para o router /trainer:
   DELETE /trainer/gym_member/{user_id}/exercises/{exercise_id}
   DELETE /trainer/gym_member/{user_id}/workout/{workout_type}
   POST   /trainer/gym_member/{user_id}/physical_assessment
+  GET    /trainer/gym_member/physical_assessment/{user_id}
 """
 
 from tests.conftest import auth_header
@@ -130,7 +131,7 @@ def test_trainer_edit_exercise_forbidden(client, admin_token, member_user, sampl
         json=payload,
         headers=auth_header(admin_token),
     )
-    assert response.status_code == 404
+    assert response.status_code == 403
 
 
 # ── DELETE /trainer/gym_member/{user_id}/exercises/{exercise_id} ──────────────
@@ -161,7 +162,7 @@ def test_trainer_delete_exercise_forbidden(client, admin_token, member_user, sam
         f"/trainer/gym_member/{member_user.id}/exercises/{sample_exercise.id}",
         headers=auth_header(admin_token),
     )
-    assert response.status_code == 404
+    assert response.status_code == 403
 
 
 # ── DELETE /trainer/gym_member/{user_id}/workout/{workout_type} ───────────────
@@ -293,3 +294,61 @@ def test_physical_assessment_forbidden_member(client, member_token, member_user)
         headers=auth_header(member_token),
     )
     assert response.status_code == 403
+
+
+# ── GET /trainer/gym_member/physical_assessment/{user_id} ─────────────────────
+
+def test_trainer_get_physical_assessment_success(client, trainer_token, member_user):
+    client.post(
+        f"/trainer/gym_member/{member_user.id}/physical_assessment",
+        json=ASSESSMENT_PAYLOAD,
+        headers=auth_header(trainer_token),
+    )
+
+    response = client.get(
+        f"/trainer/gym_member/physical_assessment/{member_user.id}",
+        headers=auth_header(trainer_token),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["users_id"] == member_user.id
+    assert body["weight"] == 80.0
+
+
+def test_trainer_get_physical_assessment_member_not_found(client, trainer_token):
+    response = client.get(
+        "/trainer/gym_member/physical_assessment/99999",
+        headers=auth_header(trainer_token),
+    )
+    assert response.status_code == 404
+    assert "não existe" in response.json()["detail"]
+
+
+def test_trainer_get_physical_assessment_not_created_yet(client, trainer_token, member_user):
+    response = client.get(
+        f"/trainer/gym_member/physical_assessment/{member_user.id}",
+        headers=auth_header(trainer_token),
+    )
+    assert response.status_code == 404
+    assert "não tem avaliação" in response.json()["detail"]
+
+
+def test_trainer_get_physical_assessment_forbidden_admin(client, admin_token, member_user):
+    response = client.get(
+        f"/trainer/gym_member/physical_assessment/{member_user.id}",
+        headers=auth_header(admin_token),
+    )
+    assert response.status_code == 403
+
+
+def test_trainer_get_physical_assessment_forbidden_member(client, member_token, member_user):
+    response = client.get(
+        f"/trainer/gym_member/physical_assessment/{member_user.id}",
+        headers=auth_header(member_token),
+    )
+    assert response.status_code == 403
+
+
+def test_trainer_get_physical_assessment_unauthenticated(client, member_user):
+    response = client.get(f"/trainer/gym_member/physical_assessment/{member_user.id}")
+    assert response.status_code == 401

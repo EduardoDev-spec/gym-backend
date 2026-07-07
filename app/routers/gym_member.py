@@ -376,7 +376,11 @@ async def get_current_subscription(
         "status": subscription.status,
         "started_at": subscription.started_at,
         "expires_at": subscription.expires_at,
-        "plan": plan
-}
+        "plan": plan,
+        "payment_method": subscription.payment_method,
+        "next_billing_at": subscription.next_billing_at,
+        "last_payment_at": subscription.last_payment_at,
+        "updated_at": subscription.updated_at,
+    }
 
 
