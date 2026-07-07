@@ -14,20 +14,57 @@ def test_create_user_success(client):
     payload = {
         "name": "Novo Aluno",
         "email": "novo@test.com",
+        "cpf": "57573140282",
         "password": "Senha123!",
         "role": "aluno",
+        "address": "Rua Nova, 10",
         "phone_number": "11911111111",
     }
     response = client.post("/auth/create_user", json=payload)
     assert response.status_code == 201
 
 
+def test_create_user_formats_cpf_before_saving(client, db):
+    from app.models.users import User
+
+    payload = {
+        "name": "CPF Formatado",
+        "email": "cpf_formatado@test.com",
+        "cpf": "220.084.018-71",
+        "password": "Senha123!",
+        "role": "aluno",
+        "address": "Rua CPF, 11",
+        "phone_number": "11911111112",
+    }
+    response = client.post("/auth/create_user", json=payload)
+    assert response.status_code == 201
+
+    user = db.query(User).filter(User.email == "cpf_formatado@test.com").first()
+    assert user.cpf == "22008401871"
+
+
+def test_create_user_invalid_cpf(client):
+    payload = {
+        "name": "CPF Invalido",
+        "email": "cpf_invalido@test.com",
+        "cpf": "11111111111",
+        "password": "Senha123!",
+        "role": "aluno",
+        "address": "Rua CPF, 12",
+        "phone_number": "11911111113",
+    }
+    response = client.post("/auth/create_user", json=payload)
+    assert response.status_code == 422
+
+
 def test_create_user_duplicate_email(client, member_user):
     payload = {
         "name": "Outro Aluno",
         "email": member_user.email,
+        "cpf": "22008401871",
         "password": "Senha123!",
         "role": "aluno",
+        "address": "Rua Duplicado, 20",
         "phone_number": "11922222222",
     }
     response = client.post("/auth/create_user", json=payload)
@@ -41,8 +78,10 @@ def test_create_user_always_creates_as_gym_member(client, db):
     payload = {
         "name": "Tentativa Admin",
         "email": "fake_admin@test.com",
+        "cpf": "94949449761",
         "password": "Senha123!",
         "role": "admin",
+        "address": "Rua Tentativa, 30",
         "phone_number": "11933333333",
     }
     response = client.post("/auth/create_user", json=payload)

@@ -92,7 +92,7 @@ async def create_user(
         email=create_user_request.email,
         cpf=create_user_request.cpf,
         hashed_password=bcrypt_context.hash(create_user_request.password),
-        role=create_user_request.role,
+        role=UserRole.trainer,
         address=create_user_request.address,
         phone_number=create_user_request.phone_number
     )

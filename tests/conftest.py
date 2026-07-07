@@ -17,6 +17,9 @@ from app.routers.user import get_db as user_get_db
 from app.routers.admin import get_db as admin_get_db
 from app.routers.trainer import get_db as trainer_get_db
 from app.routers.gym_member import get_db as gym_member_get_db
+from app.models.plans import Plan
+from app.models.subscriptions import Subscription, SubscriptionStatus
+from app.services.mercado_pago import mercado_pago_service
 
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///:memory:"
 
@@ -73,8 +76,10 @@ def admin_user(db):
     user = User(
         name="Admin Teste",
         email="admin@test.com",
+        cpf="86454404820",
         hashed_password=bcrypt_context.hash("Admin123!"),
         role=UserRole.admin,
+        address="Rua Admin, 100",
         phone_number="11999999999",
         is_active=True,
     )
@@ -89,8 +94,10 @@ def trainer_user(db):
     user = User(
         name="Treinador Teste",
         email="trainer@test.com",
+        cpf="87393124378",
         hashed_password=bcrypt_context.hash("Trainer123!"),
         role=UserRole.trainer,
+        address="Rua Treinador, 200",
         phone_number="11988888888",
         is_active=True,
     )
@@ -105,8 +112,10 @@ def member_user(db):
     user = User(
         name="Aluno Teste",
         email="member@test.com",
+        cpf="93393084844",
         hashed_password=bcrypt_context.hash("Member123!"),
         role=UserRole.gym_member,
+        address="Rua Aluno, 300",
         phone_number="11977777777",
         is_active=True,
     )
@@ -121,8 +130,10 @@ def inactive_member(db):
     user = User(
         name="Aluno Inativo",
         email="inactive@test.com",
+        cpf="51483682846",
         hashed_password=bcrypt_context.hash("Inactive123!"),
         role=UserRole.gym_member,
+        address="Rua Inativo, 400",
         phone_number="11966666666",
         is_active=False,
     )
@@ -188,3 +199,72 @@ def started_session(db, member_user, sample_exercise):
     db.refresh(we)
 
     return {"session": session, "workout_exercise": we}
+
+
+# ── Mercado Pago mock ────────────────────────────────────────────────────────
+# Nunca chama a API real do Mercado Pago nos testes: substitui os métodos do
+# serviço por dublês que devolvem respostas de sucesso previsíveis.
+
+@pytest.fixture()
+def mock_mercado_pago(monkeypatch):
+    monkeypatch.setattr(
+        mercado_pago_service,
+        "create_plan",
+        lambda name, price, duration_days: {"id": "mp-plan-123"},
+    )
+    monkeypatch.setattr(
+        mercado_pago_service,
+        "create_subscription",
+        lambda plan_id, payer_email: {
+            "id": "mp-subscription-123",
+            "init_point": "https://mercadopago.com/checkout/mp-subscription-123",
+        },
+    )
+
+
+# ── Plan / Subscription fixtures ────────────────────────────────────────────
+
+@pytest.fixture()
+def sample_plan(db):
+    plan = Plan(
+        name="Plano Mensal",
+        description="Acesso completo por 30 dias",
+        price=99.9,
+        duration_days=30,
+        active=True,
+        mercado_pago_plan_id="mp-plan-existing",
+    )
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return plan
+
+
+@pytest.fixture()
+def inactive_plan(db):
+    plan = Plan(
+        name="Plano Descontinuado",
+        description="Não vendido mais",
+        price=49.9,
+        duration_days=30,
+        active=False,
+        mercado_pago_plan_id="mp-plan-inactive",
+    )
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return plan
+
+
+@pytest.fixture()
+def pending_subscription(db, member_user, sample_plan):
+    subscription = Subscription(
+        user_id=member_user.id,
+        plan_id=sample_plan.id,
+        status=SubscriptionStatus.pending,
+        mercado_pago_subscription_id="mp-subscription-existing",
+    )
+    db.add(subscription)
+    db.commit()
+    db.refresh(subscription)
+    return subscription
