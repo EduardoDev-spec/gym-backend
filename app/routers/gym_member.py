@@ -13,6 +13,11 @@ from .auth import get_current_user
 from passlib.context import CryptContext
 from ..schemas.gym_member import StartWorkoutSessionRequest, WorkoutSessionResponse
 from datetime import datetime, UTC
+from ..schemas.plans import PublicPlanResponse
+from ..models.plans import Plan
+from ..models.subscriptions import Subscription, SubscriptionStatus
+from ..schemas.subscriptions import CreateSubscriptionRequest, CurrentSubscriptionResponse
+from ..services.mercado_pago import mercado_pago_service
 
 
 router = APIRouter(prefix='/gym_member', tags=['gym_member'] )
@@ -275,4 +280,103 @@ async def get_physical_assessment(user: user_dependency, db:db_dependency):
         raise HTTPException(status_code=404, detail='Você não possui avaliação fisica ainda, agende com nossos funcionarios!')
     
     return physical_assessment
+
+
+@router.get('/plans', response_model=list[PublicPlanResponse], status_code=status.HTTP_200_OK)
+async def get_all_plans(user: user_dependency, db:db_dependency):
+    if user.get('role') != UserRole.gym_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado. Área exclusiva para alunos!"
+        )
     
+    plans = db.query(Plan).filter(Plan.active == True).all()
+
+    return plans
+
+@router.post('/subscriptions')
+async def create_subscription(user: user_dependency, db:db_dependency, request: CreateSubscriptionRequest):
+    if user.get('role') != UserRole.gym_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado. Área exclusiva para alunos!"
+        )
+    plan = db.query(Plan).filter(Plan.id == request.plan_id).first()
+
+    if not plan:
+        raise HTTPException(
+            status_code=404,
+            detail="Plano não encontrado."
+        )
+    
+    if not plan.active:
+        raise HTTPException(
+            status_code=400,
+            detail="Este plano não está disponível."
+        )
+    
+    subscription = db.query(Subscription).filter(Subscription.user_id == user.get('id'), Subscription.status.in_(["pending", "approved"])).first()
+
+    if subscription:
+        raise HTTPException(
+            status_code=400,
+            detail="Você já possui uma assinatura ativa ou pendente."
+        )
+    
+    gym_member = db.query(User).filter(User.id == user.get("id")).first()
+                  
+    mp_subscription = mercado_pago_service.create_subscription(
+    plan_id=plan.mercado_pago_plan_id,
+    payer_email=gym_member.email)
+
+    new_subscription = Subscription(user_id=user.get("id"),plan_id=plan.id,status=SubscriptionStatus.pending,mercado_pago_subscription_id=mp_subscription["id"])
+
+    db.add(new_subscription)
+    db.commit()
+    db.refresh(new_subscription)
+
+    return {"subscription": new_subscription,"checkout_url": mp_subscription["init_point"]}
+
+
+@router.get(
+    "/subscriptions/current",
+    response_model=CurrentSubscriptionResponse,
+    status_code=status.HTTP_200_OK
+)
+async def get_current_subscription(
+    user: user_dependency,
+    db: db_dependency
+):
+    if user.get("role") != UserRole.gym_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado."
+        )
+
+    subscription = (
+        db.query(Subscription)
+        .filter(Subscription.user_id == user.get("id"))
+        .first()
+    )
+
+    if not subscription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Você não possui nenhuma assinatura."
+        )
+
+    plan = (
+        db.query(Plan)
+        .filter(Plan.id == subscription.plan_id)
+        .first()
+    )
+
+    return {
+        "id": subscription.id,
+        "status": subscription.status,
+        "started_at": subscription.started_at,
+        "expires_at": subscription.expires_at,
+        "plan": plan
+}
+
+

@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+
+    MERCADO_PAGO_ACCESS_TOKEN: str
+    MERCADO_PAGO_PUBLIC_KEY: str
+    MERCADO_PAGO_BACK_URL: str
+    
     # Pydantic configuration to read the .env file
     model_config = SettingsConfigDict(
         env_file='.env',
